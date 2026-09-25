@@ -1,5 +1,5 @@
 === Validakey Demo License ===
-Contributors: arthharvey
+Contributors: Art Harvey
 Donate link: https://validakey.com/
 Tags: license, licensing, validakey, monetization, demo
 Requires at least: 6.0
