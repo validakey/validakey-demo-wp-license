@@ -10,6 +10,7 @@ use Validakey\Exception\ApiException;
 use Validakey\Exception\PaymentRequiredException;
 use Validakey\Exception\ValidakeyException;
 use Validakey\Request\CreateTokenRequest;
+use Validakey\WordPress\InstancePaymentPanel;
 use Validakey\WordPress\LicenseBootstrap;
 use Validakey\WordPress\LicensePanel;
 
@@ -58,6 +59,13 @@ function my_plugin_options() {
 	echo '<h1>' . esc_html__( 'Validakey Demo License', 'validakey-demo-license' ) . '</h1>';
 	settings_errors();
 	render_gate_banner_settings();
+
+	if ( LicenseBootstrap::isConfigured() ) {
+		InstancePaymentPanel::render(
+			LicenseBootstrap::license()->client(),
+			payment_panel_options()
+		);
+	}
 
 	if ( LicenseBootstrap::isConfigured() && ! LicenseBootstrap::allows() ) {
 		render_create_license_form();
@@ -167,6 +175,68 @@ function handle_gate_banner_settings(): void {
 add_action( 'admin_init', 'validakey_demo_license\handle_gate_banner_settings' );
 
 /**
+ * Shared options for InstancePaymentPanel (explicit hook wiring).
+ *
+ * @return array<string, mixed>
+ */
+function payment_panel_options(): array {
+	return array(
+		'settings_page' => SETTINGS_PAGE,
+		'redirect_url'  => admin_url( 'options-general.php?page=' . SETTINGS_PAGE ),
+		'wrapper_id'    => 'validakey-demo-payment',
+		'wrapper_class' => 'validakey-demo-payment',
+		'heading'       => __( 'Payment method', 'validakey-demo-license' ),
+		'intro'         => __(
+			'Priced licenses charge the site (Instance Entity). Add a card with Square’s embedded form — the card number never touches WordPress or Validakey. No account private key is required.',
+			'validakey-demo-license'
+		),
+	);
+}
+
+/**
+ * Enqueue Square Web Payments when the settings page will show the card form.
+ */
+function enqueue_payment_card_assets( string $hook_suffix ): void {
+	if ( ! LicenseBootstrap::isConfigured() ) {
+		return;
+	}
+
+	$options = payment_panel_options();
+	$options['hook_suffix'] = $hook_suffix;
+	InstancePaymentPanel::enqueue( LicenseBootstrap::license()->client(), $options );
+}
+add_action( 'admin_enqueue_scripts', 'validakey_demo_license\enqueue_payment_card_assets', 20 );
+
+/**
+ * AJAX: attach IE card from Square source_id.
+ */
+function ajax_attach_ie_card(): void {
+	$client = LicenseBootstrap::isConfigured()
+		? LicenseBootstrap::license()->client()
+		: null;
+	InstancePaymentPanel::handleAttachAjax( $client, payment_panel_options() );
+}
+add_action(
+	'wp_ajax_' . InstancePaymentPanel::DEFAULT_ATTACH_ACTION,
+	'validakey_demo_license\ajax_attach_ie_card'
+);
+
+/**
+ * Detach IE card or mint a hosted payment link.
+ */
+function handle_payment_method_posts(): void {
+	if ( ! LicenseBootstrap::isConfigured() ) {
+		return;
+	}
+
+	$client  = LicenseBootstrap::license()->client();
+	$options = payment_panel_options();
+	InstancePaymentPanel::handleDetach( $client, $options );
+	InstancePaymentPanel::handlePaymentLink( $client, $options );
+}
+add_action( 'admin_init', 'validakey_demo_license\handle_payment_method_posts' );
+
+/**
  * Request form shown when the site has no valid grant.
  */
 function render_create_license_form() {
@@ -178,7 +248,8 @@ function render_create_license_form() {
 
 	$last_error = get_transient( CREATE_LICENSE_ERROR_TRANSIENT );
 	if ( is_string( $last_error ) && '' !== $last_error ) {
-		echo '<div class="notice notice-error inline"><p>' . esc_html( $last_error ) . '</p></div>';
+		delete_transient( CREATE_LICENSE_ERROR_TRANSIENT );
+		echo '<div class="notice notice-error inline"><p>' . wp_kses_post( $last_error ) . '</p></div>';
 	}
 
 	echo '<form method="post" class="validakey-demo-create-license-form">';
@@ -410,7 +481,15 @@ function handle_create_license_request() {
 	} catch ( \InvalidArgumentException $e ) {
 		remember_create_error( $e->getMessage() );
 	} catch ( PaymentRequiredException $e ) {
-		remember_create_error( LicensePanel::paymentNotice( $e ) );
+		$message = LicensePanel::paymentNotice( $e );
+		if ( 'ie_card_required' === (string) $e->errorCode ) {
+			$message .= ' ' . sprintf(
+				/* translators: %s: anchor link to payment section */
+				__( 'Add a card under %s, then try Request again.', 'validakey-demo-license' ),
+				'<a href="#validakey-demo-payment">' . esc_html__( 'Payment method', 'validakey-demo-license' ) . '</a>'
+			);
+		}
+		remember_create_error( $message );
 	} catch ( ApiException $e ) {
 		remember_create_error( LicensePanel::apiNotice( $e ) );
 	} catch ( ValidakeyException $e ) {
@@ -423,8 +502,8 @@ function handle_create_license_request() {
 add_action( 'admin_init', 'validakey_demo_license\handle_create_license_request' );
 
 function remember_create_error( string $message ): void {
-	$ttl = defined( 'DAY_IN_SECONDS' ) ? (int) DAY_IN_SECONDS : 86400;
-	set_transient( CREATE_LICENSE_ERROR_TRANSIENT, $message, $ttl );
+	// Flash for the post-redirect render only (not sticky across later visits).
+	set_transient( CREATE_LICENSE_ERROR_TRANSIENT, $message, 60 );
 }
 
 /**

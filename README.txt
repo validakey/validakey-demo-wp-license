@@ -19,9 +19,20 @@ It ships as a near-standard WordPress Plugin Boilerplate layout, then adds:
 
 * `LicenseBootstrap` wiring for handshake, cron revalidation, and admin notices
 * A Settings → Validakey Demo screen to request a license (token type, cost, tax) or revoke an existing key
+* A **Payment method** section with an embedded Square Web Payments form for the site’s Instance Entity card (priced mints)
 * A front-end **license gate demo** banner that calls `LicenseBootstrap::allows()`
 
 The point of the demo is the very short path from empty boilerplate to monetarily licensed software—not a polished product UI.
+
+= Payment method (Instance Entity card) =
+
+Priced tokens require a card on file for the **site** (Instance Entity), not your Validakey account PKey. This demo:
+
+1. Calls `instancePaymentStatus()` (sealed). The reply includes public Square `application_id` / `location_id` — no private key.
+2. Wires `Validakey\WordPress\InstancePaymentPanel` (enqueue, AJAX attach, detach, hosted link, render) which uses `InstanceCardForm` for the Square CDN embed.
+3. Tokenizes in the browser and posts only a `source_id` to `attachInstanceCard()`.
+
+Card numbers never reach WordPress or Validakey. If Square IDs are missing from status, use **Open hosted payment link** as a fallback.
 
 = License gate demo =
 
@@ -64,7 +75,11 @@ On purpose. The demo emphasizes simple Validakey integration steps, not replacin
 
 Uncheck it under Settings → Validakey Demo, or use the `VALIDAKEY_DEMO_LICENSE_DISABLE_GATE_BANNER` constant / `validakey_demo_license_show_gate_banner` filter described under **License gate demo** above.
 
+= Why did Request say I need a payment card? =
+
+That is `ie_card_required`: the vKey has a price and this site has no Instance Entity card yet. Open **Settings → Validakey Demo → Payment method**, save a card (or use the hosted link), then Request again.
+
 == Changelog ==
 
 = 1.0.0 =
-* Initial demo: LicenseBootstrap, create-license form (token types, cost, tax), revoke panel, license gate banner with disable controls.
+* Initial demo: LicenseBootstrap, create-license form, IE Square card embed, revoke panel, license gate banner.
