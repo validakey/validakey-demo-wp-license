@@ -1,0 +1,13 @@
+/**
+ * Admin styles for the Validakey Demo create-license form.
+ */
+
+.validakey-demo-create-license .form-table th {
+	width: 200px;
+}
+
+.validakey-demo-create-license .validakey-demo-field-duration,
+.validakey-demo-create-license .validakey-demo-field-uses,
+.validakey-demo-create-license .validakey-demo-field-recurrence {
+	display: none;
+}

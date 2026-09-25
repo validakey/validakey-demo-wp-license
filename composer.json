@@ -1,0 +1,17 @@
+{
+    "name": "validakey/validakey-demo-license",
+    "description": "Demo of Validakey-php library for creating software licenses",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "validakey/validakey-php": "dev-main"
+    },
+    "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Art Harvey",
+            "email": "art@validakey.com"
+        }
+    ],
+    "minimum-stability": "dev"
+}
